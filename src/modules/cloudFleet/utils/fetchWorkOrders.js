@@ -1,10 +1,28 @@
 const axios = require('axios');
 
-async function fetchAllVehicles(owner) {
-    const vehicles = [];
-    let nextPage = `${process.env.CLOUDFLEET_API_URL}/v1/vehicles`;
+async function fetchWorkOrders(vehicleCode, startDateFrom, startDateTo) {
+    const workOrders = [];
+    let nextPage = `${process.env.CLOUDFLEET_API_URL}/v2/work-orders`;
     let rateLimitRemaining;
     let rateLimitReset;
+
+    // Build initial query parameters
+    const queryParams = new URLSearchParams();
+
+    if (vehicleCode) {
+        queryParams.append('vehicleCode', vehicleCode);
+    }
+    if (startDateFrom) {
+        queryParams.append('startDateFrom', startDateFrom);
+    }
+    if (startDateTo) {
+        queryParams.append('startDateTo', startDateTo);
+    }
+
+    // Append query parameters to the URL
+    if (queryParams.toString()) {
+        nextPage += `?${queryParams.toString()}`;
+    }
 
     while (nextPage) {
         try {
@@ -20,8 +38,8 @@ async function fetchAllVehicles(owner) {
 
             const response = await axios(config);
 
-            // Append the retrieved vehicles to the array
-            vehicles.push(...response.data);
+            // Append the retrieved work orders to the array
+            workOrders.push(...response.data);
 
             // Extract pagination and rate limit headers
             const headers = response.headers;
@@ -36,21 +54,15 @@ async function fetchAllVehicles(owner) {
             }
 
         } catch (err) {
-            console.error('Error fetching vehicles:', err.message);
+            console.error('Error fetching work orders:', err.message);
             throw err;
         }
     }
 
-    // Filter and map the vehicles as per your requirements
-    const filteredVehicles = vehicles
-        .filter(vehicle => vehicle.costCenter && vehicle.costCenter.name === owner)
-        .map(vehicle => ({
-            id: vehicle.id,
-            code: vehicle.code,
-            typeName: vehicle.typeName
-        }));
+    // You can perform any additional filtering or mapping here if needed
+    // For example, mapping to include only specific fields
 
-    return filteredVehicles;
+    return workOrders;
 }
 
-module.exports = fetchAllVehicles;
+module.exports = fetchWorkOrders;
