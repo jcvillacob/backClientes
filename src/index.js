@@ -1,10 +1,10 @@
 const express = require('express');
-const router = express.Router();
+const app = express();
 
-// Define tus rutas aquí
-router.get('/status', (req, res) => {
-    res.json({ message: 'API funcionando correctamente' });
-});
+/* Importar rutas */
+const cloudFleetRouter = require('./modules/cloudFleet/routes/cloudFleetRoutes');
 
-// Exporta el router
-module.exports = router;
+// Rutas a cloudFleet
+app.use('/cloudfleet', cloudFleetRouter);
+
+module.exports = app;
