@@ -1,30 +1,30 @@
 require('dotenv').config();
-const { Sequelize } = require('sequelize');
+const sql = require('mssql');
 
-// * Configuración de Sequelize para SQL Server
-const sequelize = new Sequelize(process.env.DB_DATABASE, process.env.USER, process.env.PASSWORD, {
-    host: process.env.DB_SERVER,
-    dialect: 'mssql',
-    dialectOptions: {
-        options: {
-            encrypt: false, // Configuración para SQL Server, ajustar si es necesario
-        },
-    },
-    logging: false, // Puedes habilitar logging para depuración
-});
+// * Configuración de la base de datos
+const config = {
+    user: process.env.USER,
+    password: process.env.PASSWORD,
+    server: process.env.DB_SERVER,
+    database: process.env.DB_DATABASE,
+    options: {
+        encrypt: false
+    }
+};
 
-// * Función para conectar y verificar la conexión a la base de datos
-async function connectToDatabase() {
+
+// * Función para conectar la db
+async function getConnection() {
     try {
-        await sequelize.authenticate();
-        console.log('Connection to SQL Server has been established successfully.');
-    } catch (error) {
-        console.error('Unable to connect to the database:', error);
-        throw error;
+        const pool = await sql.connect(config);
+        return pool;
+    } catch (err) {
+        console.error('SQL Server connection error', err);
+        throw err;
     }
 }
 
 module.exports = {
-    sequelize,
-    connectToDatabase
+    getConnection,
+    sql
 };
