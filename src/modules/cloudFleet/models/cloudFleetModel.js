@@ -1,4 +1,4 @@
-const { sql, getConnection } = require("../../../../config/db");
+const { mssql, getConnection } = require("../../../../config/db");
 require("dotenv").config();
 const tablaBancos = `Prueba_Bancos`;
 

@@ -1,5 +1,5 @@
 require('dotenv').config();
-const sql = require('mssql');
+const mssql = require('mssql');
 
 // * Configuración de la base de datos
 const config = {
@@ -12,11 +12,10 @@ const config = {
     }
 };
 
-
 // * Función para conectar la db
 async function getConnection() {
     try {
-        const pool = await sql.connect(config);
+        const pool = await mssql.connect(config);
         return pool;
     } catch (err) {
         console.error('SQL Server connection error', err);
@@ -26,5 +25,5 @@ async function getConnection() {
 
 module.exports = {
     getConnection,
-    sql
+    mssql
 };

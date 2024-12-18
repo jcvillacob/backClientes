@@ -47,7 +47,7 @@ async function startServer() {
 
     // Iniciar el servidor
     app.listen(PORT, () => {
-      console.log(`Servidor corriendo en http://localhost:${PORT}`);
+      console.log(`Servidor corriendo en http://localhost:${PORT}/api/v1`);
     });
   } catch (err) {
     console.error("No se pudo establecer la conexión a la base de datos:", err);

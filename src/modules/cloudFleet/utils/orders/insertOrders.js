@@ -1,14 +1,8 @@
-// insertOrders.js
-import moment from 'moment';
-import { getConnection, mssql } from '../../db.js';
+const { getConnection, mssql } = require('../../../../../config/db.js');
 
 /**
  * checkOrderExists(orderNumber)
- * Retorna un objeto con:
- *  - exists (boolean) = true si la orden existe
- *  - currentStatus = estado actual en la BD (o null si no existe)
- *  - existingLabors = lista de IdLabor ya registrados en la BD
- *  - existingParts = lista de IdParte ya registrados
+ * Retorna { exists, currentStatus, existingLabors, existingParts }.
  */
 const checkOrderExists = async (orderNumber) => {
   try {
@@ -48,14 +42,15 @@ const checkOrderExists = async (orderNumber) => {
 
 /**
  * updateExistingOrder(order, existingInfo)
- * Actualiza en la BD la orden y sus labores/partes (sea porque el estado cambió o es parcial).
+ * - Actualiza los campos principales de la orden en Dev_CD_Ordenes.
+ * - Para cada labor: UPDATE si existe, INSERT si no existe.
+ * - Para cada parte: UPDATE si existe, INSERT si no existe.
  */
 const updateExistingOrder = async (order, existingInfo) => {
   try {
     const { existingLabors, existingParts } = existingInfo;
     const pool = await getConnection();
 
-    // Actualizar la información principal de la orden en Dev_CD_Ordenes
     const updateOrderQuery = `
       UPDATE Dev_CD_Ordenes
       SET Estado = @Estado,
@@ -90,7 +85,7 @@ const updateExistingOrder = async (order, existingInfo) => {
       .input('Odometro', mssql.Int, order.odometer || 0)
       .input('Proveedor', mssql.VarChar, order.vendor?.name || ' ')
       .input('Razon', mssql.VarChar, order.reason || ' ')
-      .input('TipoMantenimiento', mssql.VarChar, order.maintenanceLabels ? order.maintenanceLabels.join(', ') : ' ')
+      .input('TipoMantenimiento', mssql.VarChar, order.maintenanceLabels?.join(', ') || ' ')
       .input('TipoOrden', mssql.VarChar, order.type || ' ')
       .input('Ciudad', mssql.VarChar, order.city?.name || ' ')
       .input('CentroCosto', mssql.VarChar, order.costCenter?.name || ' ')
@@ -102,34 +97,30 @@ const updateExistingOrder = async (order, existingInfo) => {
       .input('CostoTotal', mssql.Int, order.totalCost || 0)
       .query(updateOrderQuery);
 
-    // LABORES
+    // Actualizar / Insertar labores
     if (order.labors && order.labors.length > 0) {
       for (const labor of order.labors) {
         if (existingLabors.includes(labor.id)) {
-          // Actualiza labor existente
+          // UPDATE labor existente
           const updateLaborQuery = `
             UPDATE Dev_CD_Labores
-            SET 
-              Nombre = @Nombre,
-              TipoMantenimiento = @TipoMantenimiento,
-              CostoUnitario = @CostoUnitario,
-              Cantidad = @Cantidad,
-              Descuento = @Descuento,
-              Impuesto = @Impuesto,
-              CostoTotal = @CostoTotal,
-              Sistema = @Sistema,
-              Subsistema = @Subsistema,
-              CuentaContable = @CuentaContable,
-              NumeroFactura = @NumeroFactura,
-              Comentario = @Comentario,
-              FechaCreacion = @FechaCreacion,
-              IdentificacionProveedor = @IdentificacionProveedor,
-              Proveedor = @Proveedor
-            WHERE 
-              IdLabor = @IdLabor AND 
-              NumeroOrden = @NumeroOrden
+            SET Nombre = @Nombre,
+                TipoMantenimiento = @TipoMantenimiento,
+                CostoUnitario = @CostoUnitario,
+                Cantidad = @Cantidad,
+                Descuento = @Descuento,
+                Impuesto = @Impuesto,
+                CostoTotal = @CostoTotal,
+                Sistema = @Sistema,
+                Subsistema = @Subsistema,
+                CuentaContable = @CuentaContable,
+                NumeroFactura = @NumeroFactura,
+                Comentario = @Comentario,
+                FechaCreacion = @FechaCreacion,
+                IdentificacionProveedor = @IdentificacionProveedor,
+                Proveedor = @Proveedor
+            WHERE IdLabor = @IdLabor AND NumeroOrden = @NumeroOrden
           `;
-
           await pool
             .request()
             .input('IdLabor', mssql.Int, labor.id)
@@ -152,7 +143,7 @@ const updateExistingOrder = async (order, existingInfo) => {
             .query(updateLaborQuery);
 
         } else {
-          // Inserta nueva labor
+          // INSERT labor nueva
           const insertLaborQuery = `
             INSERT INTO Dev_CD_Labores (
               IdLabor,
@@ -193,7 +184,6 @@ const updateExistingOrder = async (order, existingInfo) => {
               @Proveedor
             );
           `;
-
           await pool
             .request()
             .input('IdLabor', mssql.Int, labor.id)
@@ -218,33 +208,29 @@ const updateExistingOrder = async (order, existingInfo) => {
       }
     }
 
-    // PARTES
+    // Actualizar / Insertar partes
     if (order.parts && order.parts.length > 0) {
       for (const part of order.parts) {
         if (existingParts.includes(part.id)) {
-          // Actualizar parte existente
+          // UPDATE parte existente
           const updatePartQuery = `
             UPDATE Dev_CD_Partes
-            SET 
-              Nombre = @Nombre,
-              Codigo = @Codigo,
-              CostoUnitario = @CostoUnitario,
-              Cantidad = @Cantidad,
-              Descuento = @Descuento,
-              Impuesto = @Impuesto,
-              CostoTotal = @CostoTotal,
-              Proveedor = @Proveedor,
-              CuentaContable = @CuentaContable,
-              NumeroFactura = @NumeroFactura,
-              FechaFactura = @FechaFactura,
-              FechaPresentacion = @FechaPresentacion,
-              Comentario = @Comentario,
-              FechaCreacion = @FechaCreacion
-            WHERE 
-              IdParte = @IdParte AND 
-              NumeroOrden = @NumeroOrden
+            SET Nombre = @Nombre,
+                Codigo = @Codigo,
+                CostoUnitario = @CostoUnitario,
+                Cantidad = @Cantidad,
+                Descuento = @Descuento,
+                Impuesto = @Impuesto,
+                CostoTotal = @CostoTotal,
+                Proveedor = @Proveedor,
+                CuentaContable = @CuentaContable,
+                NumeroFactura = @NumeroFactura,
+                FechaFactura = @FechaFactura,
+                FechaPresentacion = @FechaPresentacion,
+                Comentario = @Comentario,
+                FechaCreacion = @FechaCreacion
+            WHERE IdParte = @IdParte AND NumeroOrden = @NumeroOrden
           `;
-
           await pool
             .request()
             .input('IdParte', mssql.Int, part.id)
@@ -265,7 +251,7 @@ const updateExistingOrder = async (order, existingInfo) => {
             .input('FechaCreacion', mssql.DateTime, part.createdAt)
             .query(updatePartQuery);
         } else {
-          // Insertar nueva parte
+          // INSERT parte nueva
           const insertPartQuery = `
             INSERT INTO Dev_CD_Partes (
               IdParte,
@@ -304,7 +290,6 @@ const updateExistingOrder = async (order, existingInfo) => {
               @FechaCreacion
             );
           `;
-
           await pool
             .request()
             .input('IdParte', mssql.Int, part.id)
@@ -312,7 +297,7 @@ const updateExistingOrder = async (order, existingInfo) => {
             .input('Nombre', mssql.VarChar, part.name)
             .input('Codigo', mssql.VarChar, part.code)
             .input('CostoUnitario', mssql.Int, part.unitCost || 0)
-            .input('Cantidad', mssql.Int, part.quantity || part.qty || 0)
+            .input('Cantidad', mssql.Int, part.qty || 0)
             .input('Descuento', mssql.Int, part.discount || 0)
             .input('Impuesto', mssql.Int, part.tax || 0)
             .input('CostoTotal', mssql.Int, part.totalCost || 0)
@@ -328,26 +313,30 @@ const updateExistingOrder = async (order, existingInfo) => {
       }
     }
 
-    console.log(`Orden ${order.number} actualizada correctamente.`);
+    /* console.log(`Orden ${order.number} actualizada correctamente.`); */
   } catch (error) {
     console.error(`Error al actualizar la orden ${order.number}:`, error);
   }
 };
 
 /**
- * insertOrder(order)
- * Inserta o actualiza una orden en la base de datos.
- * - Primero revisa si la orden ya existe (checkOrderExists).
- * - Si existe, llama updateExistingOrder().
- * - Si no existe, la inserta nueva y luego inserta labores y partes.
+ * insertOrder(order, stats)
+ * - Verifica si la orden ya existe (checkOrderExists).
+ * - Si existe: updateExistingOrder().
+ * - Si no existe: inserta nueva (y también inserta labores/partes).
+ * - Actualiza 'stats.newOrders' o 'stats.updatedOrders'.
  */
-export const insertOrder = async (order) => {
+const insertOrder = async (order, stats) => {
+  // stats = { newOrders, updatedOrders }
+
   try {
     const { exists, currentStatus, existingLabors, existingParts } = await checkOrderExists(order.number);
 
     if (exists) {
-      // Si la orden ya existe, la actualizamos (estado, labores, partes, etc.)
+      // Orden existe => UPDATE
       await updateExistingOrder(order, { existingLabors, existingParts });
+      stats.updatedOrders++;  // incrementamos contador de actualizadas
+      /* console.log(`Orden ${order.number} procesada (actualizada).`); */
     } else {
       // Inserción de una orden totalmente nueva
       const pool = await getConnection();
@@ -424,7 +413,7 @@ export const insertOrder = async (order) => {
         .input('Odometro', mssql.Int, order.odometer || 0)
         .input('Proveedor', mssql.VarChar, order.vendor?.name || ' ')
         .input('Razon', mssql.VarChar, order.reason || ' ')
-        .input('TipoMantenimiento', mssql.VarChar, order.maintenanceLabels ? order.maintenanceLabels.join(', ') : ' ')
+        .input('TipoMantenimiento', mssql.VarChar, order.maintenanceLabels?.join(', ') || ' ')
         .input('TipoOrden', mssql.VarChar, order.type || ' ')
         .input('Ciudad', mssql.VarChar, order.city?.name || ' ')
         .input('CentroCosto', mssql.VarChar, order.costCenter?.name || ' ')
@@ -444,7 +433,7 @@ export const insertOrder = async (order) => {
         .input('UltimaFechaCompletadoFinal', mssql.DateTime, order.lastSystemFinalCompletionDate || null)
         .query(orderInsertQuery);
 
-      // LABORES (si existen)
+      // Insertar labores
       if (order.labors && order.labors.length > 0) {
         for (const labor of order.labors) {
           const insertLaborQuery = `
@@ -487,7 +476,6 @@ export const insertOrder = async (order) => {
               @Proveedor
             );
           `;
-
           await pool
             .request()
             .input('IdLabor', mssql.Int, labor.id)
@@ -511,7 +499,7 @@ export const insertOrder = async (order) => {
         }
       }
 
-      // PARTES (si existen)
+      // Insertar partes
       if (order.parts && order.parts.length > 0) {
         for (const part of order.parts) {
           const insertPartQuery = `
@@ -552,7 +540,6 @@ export const insertOrder = async (order) => {
               @FechaCreacion
             );
           `;
-
           await pool
             .request()
             .input('IdParte', mssql.Int, part.id)
@@ -560,7 +547,7 @@ export const insertOrder = async (order) => {
             .input('Nombre', mssql.VarChar, part.name)
             .input('Codigo', mssql.VarChar, part.code)
             .input('CostoUnitario', mssql.Int, part.unitCost || 0)
-            .input('Cantidad', mssql.Int, part.quantity || part.qty || 0)
+            .input('Cantidad', mssql.Int, part.qty || 0)
             .input('Descuento', mssql.Int, part.discount || 0)
             .input('Impuesto', mssql.Int, part.tax || 0)
             .input('CostoTotal', mssql.Int, part.totalCost || 0)
@@ -575,11 +562,16 @@ export const insertOrder = async (order) => {
         }
       }
 
-      console.log(`Orden ${order.number} insertada correctamente.`);
+      // Si es nueva, incrementamos el contador
+      stats.newOrders++;
+      /* console.log(`Orden ${order.number} insertada correctamente.`); */
     }
 
-    console.log(`Orden ${order.number} procesada correctamente.`);
   } catch (error) {
     console.error(`Error al procesar la orden ${order.number}:`, error);
   }
+};
+
+module.exports = {
+  insertOrder
 };

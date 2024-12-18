@@ -1,4 +1,4 @@
-import { retrieveOrders } from './fetchOrders.js';
+const { retrieveOrders } = require('./fetchOrders.js');
 
 async function runOrdersSync() {
   try {

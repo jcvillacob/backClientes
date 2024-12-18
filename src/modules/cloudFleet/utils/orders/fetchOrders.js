@@ -1,37 +1,43 @@
-// fetchOrders.js
-import https from 'https';
-import dotenv from 'dotenv';
-import moment from 'moment';
-import { getConnection } from '../../db.js'; // Ajusta la ruta a tu archivo db.js
-import { insertOrder } from './insertOrders.js'; // Ajusta ruta según tu estructura
+const https = require("https");
+require("dotenv").config();
+const moment = require("moment");
+const { getConnection } = require("../../../../../config/db.js");
+const { insertOrder } = require("./insertOrders.js");
 
-dotenv.config();
 const apiKey = process.env.API_KEY;
 
 /**
- * getLastOrderDateFromDB()
- * Consulta la tabla Dev_CD_Ordenes para obtener la última fecha de inserción.
- * En este ejemplo, uso la columna FechaInicio como referencia. Ajusta si necesitas otra.
+ * Función para obtener la última fecha de orden de la BD.
+ * En este ejemplo, usamos 'FechaInicio' de la tabla Dev_CD_Ordenes. Ajusta si necesitas otra columna.
  */
 async function getLastOrderDateFromDB() {
   try {
     const pool = await getConnection();
-    // Consulta la máxima fecha de tu columna preferida (FechaInicio, FechaCreacion, etc.)
+    // Consulta la máxima fecha de tu columna preferida (p.ej. FechaInicio, FechaCreacion, etc.)
     const query = `SELECT MAX(FechaInicio) AS lastOrderDate FROM Dev_CD_Ordenes;`;
     const result = await pool.request().query(query);
 
     const lastDate = result.recordset[0].lastOrderDate;
     if (lastDate) {
-      // Ajusta a medianoche para la nueva consulta
-      return moment(lastDate).startOf('day').format('YYYY-MM-DDTHH:mm:ssZ');
+      // Ajustar a medianoche para la nueva consulta
+      return moment(lastDate).startOf("day").format("YYYY-MM-DDTHH:mm:ssZ");
     } else {
       // Si la tabla está vacía, por ejemplo, tomamos un mes atrás
-      return moment().subtract(1, 'month').startOf('month').format('YYYY-MM-DDTHH:mm:ssZ');
+      return moment()
+        .subtract(1, "month")
+        .startOf("month")
+        .format("YYYY-MM-DDTHH:mm:ssZ");
     }
   } catch (error) {
-    console.error('Error al obtener la última fecha de órdenes en la BD:', error);
+    console.error(
+      "Error al obtener la última fecha de órdenes en la BD:",
+      error
+    );
     // Fallback si hubo error
-    return moment().subtract(1, 'month').startOf('month').format('YYYY-MM-DDTHH:mm:ssZ');
+    return moment()
+      .subtract(1, "month")
+      .startOf("month")
+      .format("YYYY-MM-DDTHH:mm:ssZ");
   }
 }
 
@@ -42,27 +48,27 @@ async function getLastOrderDateFromDB() {
 function fetchOrderDetails(orderNumber) {
   return new Promise((resolve, reject) => {
     const options = {
-      method: 'GET',
-      hostname: 'fleet.cloudfleet.com',
+      method: "GET",
+      hostname: "fleet.cloudfleet.com",
       path: `/api/v1/work-orders/${orderNumber}`,
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json; charset=utf-8',
+        "Content-Type": "application/json; charset=utf-8",
       },
       rejectUnauthorized: false,
     };
 
     const req = https.request(options, (res) => {
-      let data = '';
+      let data = "";
 
-      res.on('data', (chunk) => {
+      res.on("data", (chunk) => {
         data += chunk;
       });
 
-      res.on('end', () => {
+      res.on("end", () => {
         try {
           const orderDetails = JSON.parse(data);
-          // Opcional: eliminar claves con null
+          // Opcional: eliminar claves con valor null
           Object.keys(orderDetails).forEach(
             (key) => orderDetails[key] === null && delete orderDetails[key]
           );
@@ -73,8 +79,11 @@ function fetchOrderDetails(orderNumber) {
       });
     });
 
-    req.on('error', (error) => {
-      console.error(`Error al obtener detalle de la orden ${orderNumber}:`, error);
+    req.on("error", (error) => {
+      console.error(
+        `Error al obtener detalle de la orden ${orderNumber}:`,
+        error
+      );
       reject(error);
     });
 
@@ -83,58 +92,66 @@ function fetchOrderDetails(orderNumber) {
 }
 
 /**
- * fetchOrdersPage(page, pathUrl)
- * Función recursiva para obtener una página de órdenes.
- * Tras recibir la lista resumida, por cada orden invocamos fetchOrderDetails().
+ * fetchOrdersPage(page, pathUrl, stats)
+ * Función recursiva para obtener una página de órdenes y procesarlas.
+ * - 'stats' es un objeto que acumula 'newOrders' y 'updatedOrders'.
  */
-function fetchOrdersPage(page, pathUrl) {
+function fetchOrdersPage(page, pathUrl, stats) {
   return new Promise((resolve, reject) => {
     const options = {
-      method: 'GET',
-      hostname: 'fleet.cloudfleet.com',
+      method: "GET",
+      hostname: "fleet.cloudfleet.com",
       path: `/api/v1/work-orders?${pathUrl}&page=${page}`,
       headers: {
         Authorization: `Bearer ${apiKey}`,
-        'Content-Type': 'application/json; charset=utf-8',
+        "Content-Type": "application/json; charset=utf-8",
       },
       rejectUnauthorized: false,
     };
 
     const req = https.request(options, async (res) => {
-      let data = '';
+      let data = "";
 
-      res.on('data', (chunk) => {
+      res.on("data", (chunk) => {
         data += chunk;
       });
 
-      res.on('end', async () => {
+      res.on("end", async () => {
         try {
           const responseData = JSON.parse(data);
-          console.log(`Página ${page} obtenida: ${responseData.length} resultados`);
+          console.log(
+            `Página ${page} obtenida: ${responseData.length} resultados`
+          );
 
-          // Por cada orden resumida de esta página, obtén el detalle y luego insértala en la BD
+          // Procesar cada orden resumida en esta página
           for (let i = 0; i < responseData.length; i++) {
             const orderSummary = responseData[i];
             const orderNumber = orderSummary.number;
 
-            console.log(`Recuperando detalle de orden ${orderNumber} (orden ${i+1}/${responseData.length} de la página ${page})...`);
+            // 1) Obtener el detalle completo de la orden
             const orderDetails = await fetchOrderDetails(orderNumber);
-            await insertOrder(orderDetails);
 
-            // Retraso de 2s entre cada orden (opcional, para no saturar la API)
+            // 2) Insertar/actualizar en BD, incrementando stats
+            await insertOrder(orderDetails, stats);
+
+            // 3) Retraso de 2s (opcional) entre cada orden para no saturar la API
             if (i < responseData.length - 1) {
               await new Promise((r) => setTimeout(r, 2000));
             }
           }
 
           // Verificar paginación
-          if (res.headers['x-nextpage']) {
+          if (res.headers["x-nextpage"]) {
             // Si hay siguiente página, llamamos recursivamente
             setTimeout(() => {
-              fetchOrdersPage(page + 1, pathUrl).then(resolve).catch(reject);
+              fetchOrdersPage(page + 1, pathUrl, stats)
+                .then(resolve)
+                .catch(reject);
             }, 2000);
           } else {
-            console.log('Se han obtenido todas las órdenes y se han insertado/actualizado en la BD.');
+            console.log(
+              "Se han procesado todas las órdenes. Inserción/actualización en BD completada."
+            );
             resolve();
           }
         } catch (error) {
@@ -143,8 +160,8 @@ function fetchOrdersPage(page, pathUrl) {
       });
     });
 
-    req.on('error', (error) => {
-      console.error('Error al obtener la página de órdenes:', error);
+    req.on("error", (error) => {
+      console.error("Error al obtener la página de órdenes:", error);
       reject(error);
     });
 
@@ -154,23 +171,32 @@ function fetchOrdersPage(page, pathUrl) {
 
 /**
  * retrieveOrders()
- * Función principal para recuperar e insertar TODAS las órdenes del rango de fechas.
- *  - Llama a getLastOrderDateFromDB() para obtener fecha de inicio
- *  - Asigna la fecha de fin como el momento actual
- *  - Construye pathUrl y llama fetchOrdersPage(1, pathUrl)
+ * Función principal para recuperar e insertar TODAS las órdenes dentro de cierto rango de fechas.
+ * - Crea un objeto stats = { newOrders: 0, updatedOrders: 0 } para llevar la cuenta de inserciones y actualizaciones.
+ * - Obtiene la última fecha desde la BD para startDate.
+ * - Llama paginación en fetchOrdersPage(1, pathUrl, stats).
+ * - Retorna stats al finalizar.
  */
-export async function retrieveOrders() {
+async function retrieveOrders() {
+  const stats = { newOrders: 0, updatedOrders: 0 };
+
   try {
     const startDate = await getLastOrderDateFromDB();
-    const endDate = moment().format('YYYY-MM-DDTHH:mm:ssZ');
-
-    // Ajusta parámetros de la API segun tu endpoint
+    const endDate = moment().format("YYYY-MM-DDTHH:mm:ssZ");
     const pathUrl = `StartDateFrom=${startDate}&StartDateTo=${endDate}`;
-    console.log(`Recuperando órdenes desde ${startDate} hasta ${endDate}`);
 
-    // Iniciar paginación en la página 1
-    await fetchOrdersPage(1, pathUrl);
+    console.log(`Recuperando órdenes desde ${startDate} hasta ${endDate}`);
+    await fetchOrdersPage(1, pathUrl, stats);
+
+    // Al terminar todo el proceso, retornamos stats con los totales
+    return stats;
   } catch (error) {
-    console.error('Error en retrieveOrders:', error);
+    console.error("Error en retrieveOrders:", error);
+    return stats; // retornamos lo que tengamos, incluso si ocurrió error
   }
 }
+
+
+module.exports = {
+  retrieveOrders
+};
